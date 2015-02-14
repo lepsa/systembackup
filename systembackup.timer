@@ -2,7 +2,7 @@
 Description=Incremental Backup
 
 [Timer]
-OnCalendar=daily
+OnCalendar=hourly
 Unit=systembackup.service
 
 [Install]

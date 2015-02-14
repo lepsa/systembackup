@@ -2,7 +2,7 @@
 #Incremental Backup Script
  
 # Current date, ISO-8601 format
-TODAY=`date -I`
+TODAY=`date -Ihours`
 
 # Last backup date
 LASTBACKUP=`ls /run/media/owen/95920304-fb6c-4a82-a0d5-05021b03f124/Backup/ | tail -n 1`
