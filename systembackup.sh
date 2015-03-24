@@ -1,20 +1,23 @@
 #!/bin/bash
 #Incremental Backup Script
- 
+
+# Get config
+source ./systembackup.conf
+
 # Current date, ISO-8601 format
 TODAY=`date -Ihours`
 
 # Last backup date
-LASTBACKUP=`ls /run/media/owen/95920304-fb6c-4a82-a0d5-05021b03f124/Backup/ | tail -n 1`
+LASTBACKUP=`ls $TARGET_DIR | tail -n 1`
  
 # Source directory
 SRC="/home/owen /etc"
  
 # Target directory
-TRG="/run/media/owen/95920304-fb6c-4a82-a0d5-05021b03f124/Backup/$TODAY"
+TRG="$TARGET_DIR$TODAY"
  
 # Link directory
-LNK="/run/media/owen/95920304-fb6c-4a82-a0d5-05021b03f124/Backup/$LASTBACKUP"
+LNK="$TARGET_DIR$LASTBACKUP"
  
 # Rsync options
 # Archive, hardlink, delete
