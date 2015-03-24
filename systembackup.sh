@@ -12,19 +12,19 @@ LASTBACKUP=`ls $TARGET_DIR | tail -n 1`
  
 # Source directory
 SRC="/home/owen /etc"
- 
+
 # Target directory
 TRG="$TARGET_DIR$TODAY"
- 
+
 # Link directory
-LNK="$TARGET_DIR$LASTBACKUP"
- 
+LNK="--link-dest=$TARGET_DIR$LASTBACKUP"
+
 # Rsync options
 # Archive, hardlink, delete
-OPT="-ah --delete --link-dest=$LNK"
+OPT="-ah --delete"
  
 # Run backup
-rsync $OPT $SRC $TRG
+rsync $OPT $LNK $SRC $TRG
 
 # Keep a list of installed packages.
 # If package list already exists, recreate it.
