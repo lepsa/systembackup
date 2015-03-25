@@ -2,19 +2,18 @@
 #Incremental Backup Script
 
 # Get config
-source ./systembackup.conf
+source /home/owen/bin/backup/systembackup.conf
 
 # Current date, ISO-8601 format
-TODAY=`date -Ihours`
+CURRENT_TIME=`date -Ihours`
 
 # Last backup date
 LASTBACKUP=`ls $TARGET_DIR | tail -n 1`
  
-# Source directory
-SRC="/home/owen /etc"
+SRC=$SOURCE_DIR
 #echo $SRC
 # Target directory
-TRG="$TARGET_DIR$TODAY"
+TRG=$TARGET_DIR$CURRENT_TIME
 #echo $TRG
 # Link directory
 LNK="--link-dest=$TARGET_DIR$LASTBACKUP"
@@ -24,6 +23,7 @@ LNK="--link-dest=$TARGET_DIR$LASTBACKUP"
 OPT="-ah --delete"
 #echo $OPT 
 # Run backup
+echo "rsync $OPT $LNK $SRC $TRG"
 rsync $OPT $LNK $SRC $TRG
 
 # Keep a list of installed packages.
