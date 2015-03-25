@@ -12,17 +12,17 @@ LASTBACKUP=`ls $TARGET_DIR | tail -n 1`
  
 # Source directory
 SRC="/home/owen /etc"
-
+#echo $SRC
 # Target directory
 TRG="$TARGET_DIR$TODAY"
-
+#echo $TRG
 # Link directory
 LNK="--link-dest=$TARGET_DIR$LASTBACKUP"
-
+#echo $LNK
 # Rsync options
 # Archive, hardlink, delete
 OPT="-ah --delete"
- 
+#echo $OPT 
 # Run backup
 rsync $OPT $LNK $SRC $TRG
 
