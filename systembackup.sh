@@ -4,27 +4,22 @@
 # Get config
 source /home/owen/bin/backup/systembackup.conf
 
-# Current date, ISO-8601 format
+# Current date with hours, ISO-8601 format
 CURRENT_TIME=`date -Ihours`
 
 # Last backup date
 LASTBACKUP=$(ls $TARGET_DIR | tail -n 1)
- 
-SRC=$SOURCE_DIR
-#echo $SRC
-# Target directory
-TRG=$TARGET_DIR/$CURRENT_TIME
-#echo $TRG
+
 # Link directory
 LNK="--link-dest=$TARGET_DIR/$LASTBACKUP"
-#echo $LNK
+
 # Rsync options
 # Archive, hardlink, delete
 OPT="-ah --delete"
-#echo $OPT 
+
 # Run backup
-echo "rsync $OPT $LNK $SRC $TRG"
-rsync $OPT $LNK $SRC $TRG
+echo "rsync $OPT $LNK $SOURCE_DIR $TARGET_DIR/$CURRENT_TIME"
+rsync $OPT $LNK $SOURCE_DIR $TARGET_DIR/$CURRENT_TIME
 
 while [ $(ls $TARGET_DIR | wc -l) -gt $(($BACKUPS_TO_KEEP)) ]
 do
