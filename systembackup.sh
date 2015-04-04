@@ -26,7 +26,7 @@ OPT="-ah --delete"
 echo "rsync $OPT $LNK $SRC $TRG"
 rsync $OPT $LNK $SRC $TRG
 
-while [ $(ls $TARGET_DIR | wc -l) -gt $(($DAYS_TO_KEEP * $BACKUPS_PER_DAY)) ]
+while [ $(ls $TARGET_DIR | wc -l) -gt $(($BACKUPS_TO_KEEP)) ]
 do
 	echo "deleting $TARGET_DIR/$(ls $TARGET_DIR | head -n 1)"
 	rm -rf $TARGET_DIR/$(ls $TARGET_DIR | head -n 1)
