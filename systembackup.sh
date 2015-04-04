@@ -8,15 +8,15 @@ source /home/owen/bin/backup/systembackup.conf
 CURRENT_TIME=`date -Ihours`
 
 # Last backup date
-LASTBACKUP=`ls $TARGET_DIR | tail -n 1`
+LASTBACKUP=$(ls $TARGET_DIR | tail -n 1)
  
 SRC=$SOURCE_DIR
 #echo $SRC
 # Target directory
-TRG=$TARGET_DIR$CURRENT_TIME
+TRG=$TARGET_DIR/$CURRENT_TIME
 #echo $TRG
 # Link directory
-LNK="--link-dest=$TARGET_DIR$LASTBACKUP"
+LNK="--link-dest=$TARGET_DIR/$LASTBACKUP"
 #echo $LNK
 # Rsync options
 # Archive, hardlink, delete
@@ -25,6 +25,12 @@ OPT="-ah --delete"
 # Run backup
 echo "rsync $OPT $LNK $SRC $TRG"
 rsync $OPT $LNK $SRC $TRG
+
+while [ $(ls $TARGET_DIR | wc -l) -gt $BACKUP_LENGTH ]
+do
+	echo "deleting $TARGET_DIR/$(ls $TARGET_DIR | head -n 1)"
+	rm -rf $TARGET_DIR/$(ls $TARGET_DIR | head -n 1)
+done
 
 # Keep a list of installed packages.
 # If package list already exists, recreate it.
