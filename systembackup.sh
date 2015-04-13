@@ -18,7 +18,7 @@ LNK="--link-dest=$TARGET_DIR/$LASTBACKUP"
 OPT="-ah --delete"
 
 # Run backup
-echo "rsync $OPT $LNK $SOURCE_DIR $TARGET_DIR/$CURRENT_TIME"
+echo "local rsync $OPT $LNK $SOURCE_DIR $TARGET_DIR/$CURRENT_TIME"
 rsync $OPT $LNK $SOURCE_DIR $TARGET_DIR/$CURRENT_TIME
 
 # Keep a list of installed packages.
@@ -48,12 +48,14 @@ done
 # Copy the backup to the remote server.
 # This does not create a new backup, 
 # but used the backup that was just made.
-REMOTE_LAST_BACKUP=$(ssh $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | tail -n 1)
-rsync -e ssh $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME  $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME
+REMOTE_LAST_BACKUP=$(ssh -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | tail -n 1)
+
+echo "remote rsync -e "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME"
+rsync -e "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME  $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME
 
 # Only keep a limited number of backups 
 # on the remote server
-while [ $(ssh $REMOTE_USER@REMOTE_SERVER ls $REMOTE_DIR | wc -l) -gt $(($REMOTE_BACKUP_TO_KEEP)) ]
+while [ $(ssh -i $SSH_ID $REMOTE_USER@REMOTE_SERVER ls $REMOTE_DIR | wc -l) -gt $(($REMOTE_BACKUP_TO_KEEP)) ]
 do
 	REMOTE_DIRECTORY_TO_DELETE=$(ssh $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | head -n 1)
 	echo "deleteing $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE"
