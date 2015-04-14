@@ -48,16 +48,19 @@ done
 # Copy the backup to the remote server.
 # This does not create a new backup, 
 # but used the backup that was just made.
-REMOTE_LAST_BACKUP=$(ssh -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | tail -n 1)
+if [ $REMOTE_BACKUP = true ]
+then
+	REMOTE_LAST_BACKUP=$(ssh -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | tail -n 1)
 
-echo "remote rsync -e "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME"
-rsync -e "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME  $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME
+	echo "remote rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME"
+	rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_DIR/$REMOTE_LAST_BACKUP $TARGET_DIR/$CURRENT_TIME  $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$CURRENT_TIME
 
-# Only keep a limited number of backups 
-# on the remote server
-while [ $(ssh -i $SSH_ID $REMOTE_USER@REMOTE_SERVER ls $REMOTE_DIR | wc -l) -gt $(($REMOTE_BACKUP_TO_KEEP)) ]
-do
-	REMOTE_DIRECTORY_TO_DELETE=$(ssh $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | head -n 1)
-	echo "deleteing $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE"
-	ssh $REMOTE_USER@$REMOTE_SERVER rm -rf $REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE
-done
+	# Only keep a limited number of backups 
+	# on the remote server
+	while [ $(ssh -i $SSH_ID $REMOTE_USER@REMOTE_SERVER ls $REMOTE_DIR | wc -l) -gt $(($REMOTE_BACKUP_TO_KEEP)) ]
+	do
+		REMOTE_DIRECTORY_TO_DELETE=$(ssh $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | head -n 1)
+		echo "deleteing $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE"
+		ssh $REMOTE_USER@$REMOTE_SERVER sudo rm -rf $REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE
+	done
+fi
