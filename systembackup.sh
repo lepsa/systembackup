@@ -42,7 +42,7 @@ fi
 pacman -Qqem > $TRG/pkglist_aur.txt
 
 # Only keep a linited number of backups
-while [ $(ls $TARGET_DIR | wc -l) -gt $(($BACKUPS_TO_KEEP)) ]
+while [ $(ls $TARGET_DIR | wc -l) -gt $BACKUPS_TO_KEEP ]
 do
 	echo "deleting $TARGET_DIR/$(ls $TARGET_DIR | head -n 1)"
 	rm -rf $TARGET_DIR/$(ls $TARGET_DIR | head -n 1)
@@ -58,17 +58,17 @@ then
 	REMOTE_TRG="$REMOTE_DIR/$CURRENT_TIME"
 
 	echo "remote directory cp -rp --reflink $REMOTE_LAST $REMOTE_TRG"
-	ssh -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp -rp --reflink $REMOTE_LAST $REMOTE_TRG
+	ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp -rp --reflink $REMOTE_LAST $REMOTE_TRG
 	
-	echo "remote rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
+	echo "remote rsync -ze ssh -i $SSH_ID $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
 	rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR
 
 	# Only keep a limited number of backups 
 	# on the remote server
-	while [ $(ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | wc -l) -gt $(($REMOTE_BACKUP_TO_KEEP)) ]
+	while [ $(($(ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | wc -l))) -gt $(($REMOTE_BACKUPS_TO_KEEP)) ]
 	do
 		REMOTE_DIRECTORY_TO_DELETE=$(ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER ls $REMOTE_DIR | head -n 1)
 		echo "deleteing $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE"
-		ssh -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo rm -rf $REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE
+		ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo rm -rf $REMOTE_DIR/$REMOTE_DIRECTORY_TO_DELETE
 	done
 fi
