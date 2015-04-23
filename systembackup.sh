@@ -21,8 +21,15 @@ TRG="$TARGET_DIR/$CURRENT_TIME"
 OPT="-ah --delete"
 
 # Run backup
-echo "local rsync $OPT $LNK $SOURCE_DIR $TRG"
-rsync $OPT $LNK $SOURCE_DIR $TARGET_DIR/$CURRENT_TIME
+# Check if the backup loaction already exists
+if [ $CURRENT_TIME != $LASTBACKUP ]
+then
+	echo "local rsync $OPT $LNK $SOURCE_DIR $TRG"
+	rsync $OPT $LNK $SOURCE_DIR $TRG
+else
+	echo "local rsync $OPT $SOURCE_DIR $TRG"
+	rsync $OPT $SOURCE_DIR $TRG
+fi
 
 # Keep a list of installed packages.
 # If package list already exists, recreate it.
@@ -57,11 +64,16 @@ then
 	REMOTE_LAST="$REMOTE_DIR/$REMOTE_LAST_BACKUP"
 	REMOTE_TRG="$REMOTE_DIR/$CURRENT_TIME"
 
-	echo "remote directory cp -rp --reflink $REMOTE_LAST $REMOTE_TRG"
-	ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp -rp --reflink $REMOTE_LAST $REMOTE_TRG
-	
-	echo "remote rsync -ze ssh -i $SSH_ID $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
-	rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR
+	if [ $REMOTE_LAST_BACKUP != $CURRENT_TIME  ]
+	then
+		echo "remote directory cp -rp --reflink $REMOTE_LAST $REMOTE_TRG"
+		ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp -rp --reflink $REMOTE_LAST $REMOTE_TRG
+		echo "remote rsync -ze ssh -i $SSH_ID $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
+		rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR &
+	else
+		echo "remote rsync -ze ssh -i $SSH_ID $OPT $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
+		rsync -ze "ssh -i $SSH_ID" $OPT $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR &
+	fi
 
 	# Only keep a limited number of backups 
 	# on the remote server
