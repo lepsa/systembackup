@@ -66,13 +66,13 @@ then
 
 	if [ $REMOTE_LAST_BACKUP != $CURRENT_TIME  ]
 	then
-		echo "remote directory cp -rp --reflink $REMOTE_LAST $REMOTE_TRG"
+		echo "remote directory cp -rp $REMOTE_LAST $REMOTE_TRG"
 		ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp -rp --reflink $REMOTE_LAST $REMOTE_TRG
 		echo "remote rsync -ze ssh -i $SSH_ID $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
-		rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR &
+		rsync -ze "ssh -i $SSH_ID" $OPT --link-dest=$REMOTE_LAST $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR 
 	else
 		echo "remote rsync -ze ssh -i $SSH_ID $OPT $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
-		rsync -ze "ssh -i $SSH_ID" $OPT $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR &
+		rsync -ze "ssh -i $SSH_ID" $OPT $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR 
 	fi
 
 	# Only keep a limited number of backups 
