@@ -67,7 +67,7 @@ then
 	if [ $REMOTE_LAST_BACKUP != $CURRENT_TIME  ]
 	then
 		echo "remote directory cp --reflink=auto -rp $REMOTE_LAST $REMOTE_TRG"
-		ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp --relink=auto -rp $REMOTE_LAST $REMOTE_TRG
+		ssh -o "BatchMode yes" -i $SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo cp --reflink=auto -rp $REMOTE_LAST $REMOTE_TRG
 		echo "remote rsync -ze ssh -i $SSH_ID $OPT --inplace $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR"
 		rsync -ze "ssh -i $SSH_ID" $OPT --inplace $TRG $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIR 
 	else
