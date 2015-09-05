@@ -3,4 +3,4 @@ Description=Incremental Backup
 
 [Service]
 Type=simple
-ExecStart=/home/owen/bin/backup/systembackup.sh
+ExecStart=/usr/bin/backup/systembackup.sh

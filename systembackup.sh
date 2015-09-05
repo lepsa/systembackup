@@ -2,7 +2,7 @@
 #Incremental Backup Script
 
 # Get config
-source /home/owen/bin/backup/systembackup.conf
+source /etc/backup/systembackup.conf
 
 # Current date with hours, ISO-8601 format
 CURRENT_TIME=$(date -Ihours)
@@ -11,28 +11,86 @@ CURRENT_TIME=$(date -Ihours)
 LOCAL_LAST_BACKUP=$(ls $LOCAL_BACKUP_DIRECTORY | tail -n 1)
 
 # Link directory
-LOCAL_BACKUP_LINK="--link-dest=$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP"
+LOCAL_BACKUP_LINK="--link-dest=$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP/"
 
 # Backup location
 LOCAL_BACKUP_TARGET="$LOCAL_BACKUP_DIRECTORY/$CURRENT_TIME"
 
 # Rsync options
 # Archive, hardlink, delete
-RSYNC_OPTIONS="-ah --delete"
+RSYNC_OPTIONS="-ahI --checksum --delete"
 
-# Temp directory to store encrypted files before
-# they are hardlinked against previous backups
-#CRYTO_TEMP_DIR=$TARGET_DIR/temp_encrypt
+# Create a temp directory for encrypting files.
+TEMP_DIR=$(mktemp -d -p "$LOCAL_BACKUP_DIRECTORY")
+for i in $SOURCES
+do
+	#echo "$i"
+	# This IFS split line variable is important
+	IFS=$'\n'
+	for j in $(find "$i" -type d)
+	do
+		#echo "$j"
+		mkdir -p "$TEMP_DIR$j"
+		mkdir -p "$LOCAL_BACKUP_TARGET$j"
+	done
+	unset IFS
+done
+
+echo "Start local backup"
+for i in $SOURCES
+do
+	IFS=$'\n'
+	for j in $(find "$i" -type f)
+	do
+		if [ -e "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" ]
+		then
+			#echo "a - $LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc"
+			# encrypted file exists, get the salt and iv
+			SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc")"
+			SALT="$(echo $SALT_IV | cut -d ' ' -f 1 | cut -d '=' -f 2)"
+			IV="$(echo $SALT_IV | cut -d ' ' -f 4 | cut -d '=' -f 2)"
+			openssl enc -e "$CIPHER" -S "$SALT" -iv "$IV" -pass "$PASSWORD" -in "$j" -out "$TEMP_DIR$j.enc"
+			BACKUP_HASH="$(sha256sum "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" | cut -d ' ' -f 1)"
+			TEMP_HASH="$(sha256sum "$TEMP_DIR$j.enc" | cut -d ' ' -f 1)"
+			#echo "SALT = $SALT"
+			#echo "IV = $IV"
+			#echo "BACKUP_HASH = $BACKUP_HASH"
+			#echo "TEMP_HASH   = $TEMP_HASH"
+			if [ "$BACKUP_HASH" != "$TEMP_HASH" ]
+			then
+				# Encrypted files have different hashes.
+				# Re-encrypt so that known plaintext attacks
+				# aren't effective.
+				#echo "c - $j"
+				rm -f "$TEMP_DIR$j.enc"
+				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
+			else
+				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" "$LOCAL_BACKUP_TARGET$j.enc"
+			fi
+		else
+			#echo "b - $j"
+			# new file, encrypt it, let openssl handle the salt and iv
+			openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
+		fi
+	done
+	unset IFS
+done
 
 # Run backup
 # Check if the backup loaction already exists
-if [ $CURRENT_TIME != $LOCAL_LAST_BACKUP ]
+#if [ $CURRENT_TIME != $LOCAL_LAST_BACKUP ]
+#then
+	#echo "local rsync $RSYNC_OPTIONS $LOCAL_BACKUP_LINK $SOURCES ($TEMP_DIR/) $LOCAL_BACKUP_TARGET"
+	#rsync $RSYNC_OPTIONS $LOCAL_BACKUP_LINK $TEMP_DIR/ $LOCAL_BACKUP_TARGET
+#else
+	#echo "local rsync $RSYNC_OPTIONS $SOURCES ($TEMP_DIR/) $LOCAL_BACKUP_TARGET"
+	#rsync $RSYNC_OPTIONS $TEMP_DIR/ $LOCAL_BACKUP_TARGET
+#fi
+
+# Delete the temp crypto directory
+if [ "$TEMP_DIR" != "" ]
 then
-	echo "local rsync $RSYNC_OPTIONS $LOCAL_BACKUP_LINK $SOURCES $LOCAL_BACKUP_TARGET"
-	rsync $RSYNC_OPTIONS $LOCAL_BACKUP_LINK $SOURCES $LOCAL_BACKUP_TARGET
-else
-	echo "local rsync $RSYNC_OPTIONS $SOURCES $LOCAL_BACKUP_TARGET"
-	rsync $RSYNC_OPTIONS $SOURCES $LOCAL_BACKUP_TARGET
+	rm -rf "$TEMP_DIR"
 fi
 
 # Keep a list of installed packages.
@@ -56,7 +114,7 @@ pacman -Qqem > $LOCAL_BACKUP_TARGET/pkglist_aur.txt
 while [ $(ls $LOCAL_BACKUP_DIRECTORY | wc -l) -gt $LOCAL_BACKUPS_TO_KEEP ]
 do
 	echo "deleting $LOCAL_BACKUP_DIRECTORY/$(ls $LOCAL_BACKUP_DIRECTORY | head -1)"
-	rm -rf $LOCAL_BACKUP_DIRECTORY/$(ls $LOCAL_BACKUP_DIRECTORY | head  -1)
+	rm -rf "$LOCAL_BACKUP_DIRECTORY/$(ls $LOCAL_BACKUP_DIRECTORY | head  -1)"
 done
 
 # Run remote backups
