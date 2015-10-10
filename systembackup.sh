@@ -76,17 +76,6 @@ do
 	unset IFS
 done
 
-# Run backup
-# Check if the backup loaction already exists
-#if [ $CURRENT_TIME != $LOCAL_LAST_BACKUP ]
-#then
-	#echo "local rsync $RSYNC_OPTIONS $LOCAL_BACKUP_LINK $SOURCES ($TEMP_DIR/) $LOCAL_BACKUP_TARGET"
-	#rsync $RSYNC_OPTIONS $LOCAL_BACKUP_LINK $TEMP_DIR/ $LOCAL_BACKUP_TARGET
-#else
-	#echo "local rsync $RSYNC_OPTIONS $SOURCES ($TEMP_DIR/) $LOCAL_BACKUP_TARGET"
-	#rsync $RSYNC_OPTIONS $TEMP_DIR/ $LOCAL_BACKUP_TARGET
-#fi
-
 # Delete the temp crypto directory
 if [ "$TEMP_DIR" != "" ]
 then
