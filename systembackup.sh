@@ -20,6 +20,14 @@ LOCAL_BACKUP_TARGET="$LOCAL_BACKUP_DIRECTORY/$CURRENT_TIME"
 # Archive, hardlink, delete
 RSYNC_OPTIONS="-ahI --checksum --delete"
 
+# If there is a pre-existing tmp dir, remove it
+TMP_REGEX="tmp\.[a-zA-Z0-9]{10}"
+EXISTING_TMP=$(ls $LOCAL_BACKUP_DIRECTORY | egrep "$TMP_REGEX")
+if [ "" != "$EXISTING_TMP" ]
+then
+	rm -rf "$LOCAL_BACKUP_DIRECTORY/$EXISTING_TMP"
+fi
+
 # Create a temp directory for encrypting files.
 TEMP_DIR=$(mktemp -d -p "$LOCAL_BACKUP_DIRECTORY")
 for i in $SOURCES
