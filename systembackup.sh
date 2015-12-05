@@ -94,18 +94,18 @@ fi
 # If package list already exists, recreate it.
 # Allows script to be run manually without error.
 # Native packages.
-if [ -e $LOCAL_BACKUP_TARGET/pkglist.txt ]
+if [ -e $LOCAL_BACKUP_TARGET/pkglist.txt.enc ]
 then
-	rm $LOCAL_BACKUP_TARGET/pkglist.txt
+	rm $LOCAL_BACKUP_TARGET/pkglist.txt.enc
 fi
-pacman -Qqen > $LOCAL_BACKUP_TARGET/pkglist.txt
+pacman -Qqen | openssl enc -e "$CIPHER" -pass "$PASSWORD" -out "$LOCAL_BACKUP_TARGET/pkglist.txt.enc"
 
 # AUR packages
-if [ -e $LOCAL_BACKUP_TARGET/pkglist_aur.txt ]
+if [ -e $LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc ]
 then
-	rm $LOCAL_BACKUP_TARGET/pkglist_aur.txt
+	rm $LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc
 fi
-pacman -Qqem > $LOCAL_BACKUP_TARGET/pkglist_aur.txt
+pacman -Qqem | openssl enc -e "$CIPHER" -pass "$PASSWORD" -out "$LOCAL_BACKUP_TARGET/pkglist.txt.enc"
 
 # Only keep a limited number of backups
 while [ $(ls $LOCAL_BACKUP_DIRECTORY | wc -l) -gt $LOCAL_BACKUPS_TO_KEEP ]
