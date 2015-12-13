@@ -105,7 +105,7 @@ if [ -e $LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc ]
 then
 	rm $LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc
 fi
-pacman -Qqem | openssl enc -e "$CIPHER" -pass "$PASSWORD" -out "$LOCAL_BACKUP_TARGET/pkglist.txt.enc"
+pacman -Qqem | openssl enc -e "$CIPHER" -pass "$PASSWORD" -out "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc"
 
 # Only keep a limited number of backups
 while [ $(ls $LOCAL_BACKUP_DIRECTORY | wc -l) -gt $LOCAL_BACKUPS_TO_KEEP ]
