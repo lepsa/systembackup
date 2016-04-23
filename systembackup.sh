@@ -30,6 +30,7 @@ fi
 
 # Create a temp directory for encrypting files.
 TEMP_DIR=$(mktemp -d -p "$LOCAL_BACKUP_DIRECTORY")
+
 for i in $SOURCES
 do
 	#echo "$i"
@@ -50,34 +51,29 @@ do
 	IFS=$'\n'
 	for j in $(find "$i" -type f)
 	do
+		#echo \"$LOCAL_BACKUP_DIRECTORY\" \"$LOCAL_LAST_BACKUP\" \"$j\" \"$CIPHER\" \"$PASSWORD\" \"$TEMP_DIR\" \"$LOCAL_BACKUP_TARGET\"
 		if [ -e "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" ]
 		then
-			#echo "a - $LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc"
-			# encrypted file exists, get the salt and iv
-			SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc")"
-			SALT="$(echo $SALT_IV | cut -d ' ' -f 1 | cut -d '=' -f 2)"
-			IV="$(echo $SALT_IV | cut -d ' ' -f 4 | cut -d '=' -f 2)"
-			openssl enc -e "$CIPHER" -S "$SALT" -iv "$IV" -pass "$PASSWORD" -in "$j" -out "$TEMP_DIR$j.enc"
-			BACKUP_HASH="$(sha256sum "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" | cut -d ' ' -f 1)"
-			TEMP_HASH="$(sha256sum "$TEMP_DIR$j.enc" | cut -d ' ' -f 1)"
-			#echo "SALT = $SALT"
-			#echo "IV = $IV"
-			#echo "BACKUP_HASH = $BACKUP_HASH"
-			#echo "TEMP_HASH   = $TEMP_HASH"
-			if [ "$BACKUP_HASH" != "$TEMP_HASH" ]
+			#echo "decrypt backup file and compare with current file"
+			#echo "$TEMP_DIR$j.dec"
+			openssl enc -d "$CIPHER" -pass "$PASSWORD" -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" -out "$TEMP_DIR$j.dec"
+			cmp -s "$j" "$TEMP_DIR$j.dec"
+			status=$?
+			if [ $status -eq 0 ]
 			then
-				# Encrypted files have different hashes.
-				# Re-encrypt so that known plaintext attacks
-				# aren't effective.
-				#echo "c - $j"
-				rm -f "$TEMP_DIR$j.enc"
+				# Files are different
+				#echo "status = $status"
+				#echo "Files are the same"
 				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
 			else
+				# Files are the same
+				#echo "status = $status"
+				#echo "Files are different"
 				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" "$LOCAL_BACKUP_TARGET$j.enc"
 			fi
 		else
 			#echo "b - $j"
-			# new file, encrypt it, let openssl handle the salt and iv
+			#echo "new file, encrypt it, let openssl handle the salt and iv"
 			openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
 		fi
 	done
