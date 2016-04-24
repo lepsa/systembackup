@@ -64,16 +64,16 @@ do
 				# Files are different
 				#echo "status = $status"
 				#echo "Files are the same"
-				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
+				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" "$LOCAL_BACKUP_TARGET$j.enc"
 			else
 				# Files are the same
 				#echo "status = $status"
 				#echo "Files are different"
-				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" "$LOCAL_BACKUP_TARGET$j.enc"
+				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
 			fi
 		else
 			#echo "b - $j"
-			#echo "new file, encrypt it, let openssl handle the salt and iv"
+			#echo "new file, encrypt it."
 			openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
 		fi
 	done
