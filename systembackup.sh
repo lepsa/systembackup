@@ -1,6 +1,33 @@
 #!/bin/bash
 #Incremental Backup Script
 
+# I really need to add HMAC to this so that we are able to verify that the
+# backups are genuine, and have not been messed with by some third party
+# that has either found the key, or knows how to mess with the cipher.
+# Note: You REALLY need to use a different key for HMAC, or use the cipher
+# mode, GCM(?), that incorperates something similar to HMAC.
+#
+# Basically, what needs to happen is that after the file has been encypted
+# we need to generate a hmac file that is stored along side it. So 
+# $name.hmac-$hash. Before decrypting the localbackup to compare against,
+# the hmac needs to be checked, as we don't know if the file is still good.
+# The hmac will tell us if the file is the same as when we wrote it, with
+# extreamly close to 100% certainty.
+# 
+# The recovery script will also need to check for the existance of the hmac
+# and check that the file can be verified against it.
+#
+# So, all in all
+# New file = encrypt >>= hmac of enc file >>= both stored to disk
+# existing file = (check for hmac) match {
+#  case true => verifyHmac(hmac, enc)
+#  case false => new file
+# }
+# verifyHmac = create hmac of enc >>= verify against current hmac >>= match {
+#  case same => hardlink on disk
+#  case diff => new file
+#}
+
 # Get config
 source /etc/backup/systembackup.conf
 
@@ -21,6 +48,10 @@ LOCAL_BACKUP_TARGET="$LOCAL_BACKUP_DIRECTORY/$CURRENT_TIME"
 RSYNC_OPTIONS="-ahI --checksum --delete"
 
 # If there is a pre-existing tmp dir, remove it
+# this really should use scrub to get rid of the data. The whole idea is that
+# we don't want unencrypted data on disk. This is just a shitty solution until
+# I can get this to work with pipes and streams. That will be wonderful.
+# The hashes and ciphers should be fine with it.
 TMP_REGEX="tmp\.[a-zA-Z0-9]{10}"
 EXISTING_TMP=$(ls $LOCAL_BACKUP_DIRECTORY | egrep "$TMP_REGEX")
 if [ "" != "$EXISTING_TMP" ]
@@ -31,6 +62,7 @@ fi
 # Create a temp directory for encrypting files.
 TEMP_DIR=$(mktemp -d -p "$LOCAL_BACKUP_DIRECTORY")
 
+echo "Make backup directory tree"
 for i in $SOURCES
 do
 	#echo "$i"
@@ -61,12 +93,12 @@ do
 			status=$?
 			if [ $status -eq 0 ]
 			then
-				# Files are different
+				# Files are the same
 				#echo "status = $status"
 				#echo "Files are the same"
 				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" "$LOCAL_BACKUP_TARGET$j.enc"
 			else
-				# Files are the same
+				# Files are differnet
 				#echo "status = $status"
 				#echo "Files are different"
 				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
@@ -81,6 +113,12 @@ do
 done
 
 # Delete the temp crypto directory
+# This really needs to use scrub to get rid of the data, as the entire idea
+# is to avoid having plaintext files on the disk. Even then, filesystems
+# or hardware mighbe tricksy and write to differnet blocks. Really the tmp
+# dir needs to be gotten rid of, and have it be replaced with pipes and
+# streams. I trust ram to be more secure (ha!) than disk, as the ram is likely
+# to be overridden far faster than disk.
 if [ "$TEMP_DIR" != "" ]
 then
 	rm -rf "$TEMP_DIR"
@@ -147,3 +185,4 @@ do
 		ssh -xo "BatchMode yes" -i $REMOTE_SSH_ID $REMOTE_USER@$REMOTE_SERVER sudo rm -rf $REMOTE_DIRECTORY_TO_DELETE
 	done
 done
+echo "Backup completed"

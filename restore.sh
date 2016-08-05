@@ -1,5 +1,9 @@
 #! /bin/bash
 
+# This needs to be modified so that it is able to verify files against HMACs.
+# Because currently we just unquestionably accept any data that is in the 
+# directory and we can't know if it is valid or not.
+
 # Get config
 source /etc/backup/systembackup.conf
 
