@@ -47,21 +47,6 @@ LOCAL_BACKUP_TARGET="$LOCAL_BACKUP_DIRECTORY/$CURRENT_TIME"
 # Archive, hardlink, delete
 RSYNC_OPTIONS="-ahI --checksum --delete"
 
-# If there is a pre-existing tmp dir, remove it
-# this really should use scrub to get rid of the data. The whole idea is that
-# we don't want unencrypted data on disk. This is just a shitty solution until
-# I can get this to work with pipes and streams. That will be wonderful.
-# The hashes and ciphers should be fine with it.
-TMP_REGEX="tmp\.[a-zA-Z0-9]{10}"
-EXISTING_TMP=$(ls $LOCAL_BACKUP_DIRECTORY | egrep "$TMP_REGEX")
-if [ "" != "$EXISTING_TMP" ]
-then
-	rm -rf "$LOCAL_BACKUP_DIRECTORY/$EXISTING_TMP"
-fi
-
-# Create a temp directory for encrypting files.
-TEMP_DIR=$(mktemp -d -p "$LOCAL_BACKUP_DIRECTORY")
-
 echo "Make backup directory tree"
 for i in $SOURCES
 do
@@ -71,7 +56,6 @@ do
 	for j in $(find "$i" -type d)
 	do
 		#echo "$j"
-		mkdir -p "$TEMP_DIR$j"
 		mkdir -p "$LOCAL_BACKUP_TARGET$j"
 	done
 	unset IFS
@@ -83,63 +67,73 @@ do
 	IFS=$'\n'
 	for j in $(find "$i" -type f)
 	do
-		#echo \"$LOCAL_BACKUP_DIRECTORY\" \"$LOCAL_LAST_BACKUP\" \"$j\" \"$CIPHER\" \"$PASSWORD\" \"$TEMP_DIR\" \"$LOCAL_BACKUP_TARGET\"
-		if [ -e "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" ]
+		#echo \"$LOCAL_BACKUP_DIRECTORY\" \"$LOCAL_LAST_BACKUP\" \"$j\" \"$CIPHER\" \"$PASSWORD\" \"$LOCAL_BACKUP_TARGET\"
+		if [ -e "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER" ]
 		then
+      status=1
 			#echo "decrypt backup file and compare with current file"
-			#echo "$TEMP_DIR$j.dec"
-			openssl enc -d "$CIPHER" -pass "$PASSWORD" -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" -out "$TEMP_DIR$j.dec"
-			cmp -s "$j" "$TEMP_DIR$j.dec"
-			status=$?
+      # I remembered that io redirection as a file is totally a thing.
+      # Should also be nice on memory usage too!
+
+      # Check that the hmac is valid, THEN check if the crypto needs to be done.
+      cmp -s "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER") 
+      if [ $? -eq 0 ]
+      then
+        # This does some decryption, because that is what it needs to get the IV.
+        SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc")"
+        SALT="$(echo $SALT_IV | cut -d ' ' -f 1 | cut -d '=' -f 2)"
+        IV="$(echo $SALT_IV | cut -d ' ' -f 4 | cut -d '=' -f 2)"
+        cmp -s "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
+	  		status=$?
+      fi
 			if [ $status -eq 0 ]
 			then
 				# Files are the same
 				#echo "status = $status"
 				#echo "Files are the same"
-				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc" "$LOCAL_BACKUP_TARGET$j.enc"
+				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER" "$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
+				ln "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO" "$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
 			else
 				# Files are differnet
 				#echo "status = $status"
 				#echo "Files are different"
-				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
+
+        # Write encrypted file to disk and generate hmac
+				openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$LOCAL_BACKUP_TARGET$j.enc$CIPHER" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO" 
 			fi
 		else
 			#echo "b - $j"
 			#echo "new file, encrypt it."
-			openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" -out "$LOCAL_BACKUP_TARGET$j.enc"
+      openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$LOCAL_BACKUP_TARGET$j.enc$CIPHER" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
 		fi
 	done
 	unset IFS
 done
 
-# Delete the temp crypto directory
-# This really needs to use scrub to get rid of the data, as the entire idea
-# is to avoid having plaintext files on the disk. Even then, filesystems
-# or hardware mighbe tricksy and write to differnet blocks. Really the tmp
-# dir needs to be gotten rid of, and have it be replaced with pipes and
-# streams. I trust ram to be more secure (ha!) than disk, as the ram is likely
-# to be overridden far faster than disk.
-if [ "$TEMP_DIR" != "" ]
-then
-	rm -rf "$TEMP_DIR"
-fi
-
 # Keep a list of installed packages.
 # If package list already exists, recreate it.
 # Allows script to be run manually without error.
 # Native packages.
-if [ -e $LOCAL_BACKUP_TARGET/pkglist.txt.enc ]
+if [ -e "$LOCAL_BACKUP_TARGET/pkglist.txt.enc$CIPHER" ]
 then
-	rm $LOCAL_BACKUP_TARGET/pkglist.txt.enc
+	rm "$LOCAL_BACKUP_TARGET/pkglist.txt.enc$CIPHER"
 fi
-pacman -Qqen | openssl enc -e "$CIPHER" -pass "$PASSWORD" -out "$LOCAL_BACKUP_TARGET/pkglist.txt.enc"
+if [ -e "$LOCAL_BACKUP_TARGET/pkglist.txt.hmac$HMAC_ALGO" ]
+then
+	rm "$LOCAL_BACKUP_TARGET/pkglist.txt.hmac$HMAC_ALGO"
+fi
+pacman -Qqen | openssl enc -e "$CIPHER" -pass "$PASSWORD" | tee "$LOCAL_BACKUP_TARGET/pkglist.txt.enc$CIPHER" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$LOCAL_BACKUP_TARGET/pkglist.txt.hmac$HMAC_ALGO"
 
 # AUR packages
-if [ -e $LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc ]
+if [ -e "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc$CIPHER" ]
 then
-	rm $LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc
+	rm "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc$CIPHER"
 fi
-pacman -Qqem | openssl enc -e "$CIPHER" -pass "$PASSWORD" -out "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc"
+if [ -e "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.hmac$HMAC_ALGO" ]
+then
+	rm "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.hmac$HMAC_ALGO"
+fi
+pacman -Qqem | openssl enc -e "$CIPHER" -pass "$PASSWORD" | tee "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.enc$CIPHER" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$LOCAL_BACKUP_TARGET/pkglist_aur.txt.hmac$HMAC_ALGO"
 
 # Only keep a limited number of backups
 while [ $(ls $LOCAL_BACKUP_DIRECTORY | wc -l) -gt $LOCAL_BACKUPS_TO_KEEP ]
