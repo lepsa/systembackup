@@ -76,13 +76,13 @@ do
       # Should also be nice on memory usage too!
 
       # Check that the hmac is valid, THEN check if the crypto needs to be done.
-      cmp -s "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER") 
+      cmp -s "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO" <(cat "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " ") 
       if [ $? -eq 0 ]
       then
         # This does some decryption, because that is what it needs to get the IV.
-        SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc")"
-        SALT="$(echo $SALT_IV |  head -n 1 | cut -d '=' -f 2)"
-        IV="$(echo $SALT_IV | tail -n 1 | cut -d '=' -f 2)"
+        SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER")"
+        SALT="$(echo $SALT_IV | cut -d " " -f 1 | cut -d '=' -f 2)"
+        IV="$(echo $SALT_IV | cut -d " " -f 4 | cut -d '=' -f 2)"
         cmp -s "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
 	  		status=$?
       fi
