@@ -81,8 +81,8 @@ do
       then
         # This does some decryption, because that is what it needs to get the IV.
         SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc")"
-        SALT="$(echo $SALT_IV | cut -d ' ' -f 1 | cut -d '=' -f 2)"
-        IV="$(echo $SALT_IV | cut -d ' ' -f 4 | cut -d '=' -f 2)"
+        SALT="$(echo $SALT_IV |  head -n 1 | cut -d '=' -f 2)"
+        IV="$(echo $SALT_IV | tail -n 1 | cut -d '=' -f 2)"
         cmp -s "$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
 	  		status=$?
       fi
