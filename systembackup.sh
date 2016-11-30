@@ -67,14 +67,14 @@ do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    echo "working on file $j"
+    #echo "working on file $j"
 
     LAST_HMAC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO"
     LAST_ENC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER"
     TARGET_HMAC="$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
     TARGET_ENC="$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
 
-    if [ -e "$LAST_ENC" ]
+    if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
     then
       status=1
       #echo "decrypt backup file and compare with current file"
@@ -82,7 +82,7 @@ do
       # Should also be nice on memory usage too!
 
       # Check that the hmac is valid, THEN check if the crypto needs to be done.
-      echo "cmp 1"
+      #echo "cmp 1"
       cmp -s "$LAST_HMAC" <(cat "$LAST_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " ") 
       if [ $? -eq 0 ]
       then
@@ -90,7 +90,9 @@ do
         SALT_IV="$(openssl enc -d $CIPHER -pass $PASSWORD -P -in "$LAST_ENC")"
         SALT="$(echo $SALT_IV | cut -d " " -f 1 | cut -d '=' -f 2)"
         IV="$(echo $SALT_IV | cut -d " " -f 4 | cut -d '=' -f 2)"
-        echo "cmp 2"
+        #echo "salt = $SALT"
+        #echo "iv = $IV"
+        #echo "cmp 2"
         cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
         status=$?
       fi
@@ -98,20 +100,19 @@ do
       then
         # Files are the same
         #echo "status = $status"
-        echo "Files are the same"
+        #echo "Files are the same"
         ln "$LAST_ENC" "$TARGET_ENC"
         ln "$LAST_HMAC" "$TARGET_HMAC"
       else
         # Files are differnet
         #echo "status = $status"
-        echo "Files are different"
+        #echo "Files are different"
 
         # Write encrypted file to disk and generate hmac
         openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC" 
       fi
     else
-      #echo "b - $j"
-      echo "new file, encrypt it."
+      #echo "new file, encrypt it."
       openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC"
     fi
   done
