@@ -80,12 +80,13 @@ do
 
       # Check that the hmac is valid, THEN check if the crypto needs to be done.
       echo "cmp 1"
-      if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < $"LAST_ENC" | cut -f 1 -d " ")
+      if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < "$LAST_ENC" | cut -f 1 -d " ")
       then
         # This does some decryption, because that is what it needs to get the IV.
-        SALT_IV="$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC")"
+        SALT_IV="$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")"
         SALT="$(echo "$SALT_IV" | cut -d " " -f 1 | cut -d '=' -f 2)"
         IV="$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)"
+        echo "salt/iv = $SALT_IV"
         echo "salt = $SALT"
         echo "iv = $IV"
         echo "cmp 2"
@@ -151,7 +152,7 @@ done
 for REMOTE_CONFIG_LINE in "${REMOTE_CONFIG[@]}"
 do
   # Split the config line
-  IFS=' ' read -ar SPLIT_REMOTE_CONFIG <<< "$REMOTE_CONFIG_LINE"
+  IFS=' ' read -a SPLIT_REMOTE_CONFIG <<< "$REMOTE_CONFIG_LINE"
   REMOTE_SERVER=${SPLIT_REMOTE_CONFIG[0]}
   REMOTE_USER=${SPLIT_REMOTE_CONFIG[1]}
   REMOTE_SSH_ID=${SPLIT_REMOTE_CONFIG[2]}
