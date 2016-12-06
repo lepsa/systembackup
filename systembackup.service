@@ -2,5 +2,6 @@
 Description=Incremental Backup
 
 [Service]
+CPUAffinity=0
 Type=simple
 ExecStart=/usr/bin/backup/systembackup.sh

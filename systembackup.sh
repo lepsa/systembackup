@@ -28,6 +28,9 @@
 #  case diff => new file
 #}
 
+set -euo pipefail
+
+
 # Get config
 source /etc/backup/systembackup.conf
 
@@ -64,13 +67,13 @@ do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    echo "working on file $j"
+    echo "working on file $j" >> /home/owen/backup.log
 
     LAST_HMAC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO"
     LAST_ENC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER"
     TARGET_HMAC="$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
     TARGET_ENC="$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
-
+    echo "targets setup" >> /home/owen/backup.log
     if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
     then
       status=1
@@ -79,37 +82,44 @@ do
       # Should also be nice on memory usage too!
 
       # Check that the hmac is valid, THEN check if the crypto needs to be done.
-      echo "cmp 1"
+      echo "cmp 1" >> /home/owen/backup.log
       if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < "$LAST_ENC" | cut -f 1 -d " ")
       then
+        echo "get salt/iv" >> /home/owen/backup.log
         # This does some decryption, because that is what it needs to get the IV.
-        SALT_IV="$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")"
-        SALT="$(echo "$SALT_IV" | cut -d " " -f 1 | cut -d '=' -f 2)"
-        IV="$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)"
-        echo "salt/iv = $SALT_IV"
-        echo "salt = $SALT"
-        echo "iv = $IV"
-        echo "cmp 2"
-        cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
-        status=$?
+        SALT_IV=$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")
+        echo "aaaaaa" >> /home/owen/backup.log
+        SALT=$(echo "${SALT_IV:?}" | cut -d " " -f 1 | cut -d '=' -f 2)
+        echo "bbbbbb" >> /home/owen/backup.log
+        IV=$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)
+        echo "salt/iv = $SALT_IV" >> /home/owen/backup.log
+        echo "salt = $SALT" >> /home/owen/backup.log
+        echo "iv = $IV" >> /home/owen/backup.log
+        echo "cmp 2" >> /home/owen/backup.log
+        if cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
+        then
+          status=0
+        else
+          status=1
+        fi
       fi
       if [ $status -eq 0 ]
       then
         # Files are the same
         #echo "status = $status"
-        echo "Files are the same"
+        echo "Files are the same" >> /home/owen/backup.log
         ln "$LAST_ENC" "$TARGET_ENC"
         ln "$LAST_HMAC" "$TARGET_HMAC"
       else
         # Files are differnet
         #echo "status = $status"
-        echo "Files are different"
+        echo "Files are different" >> /home/owen/backup.log
 
         # Write encrypted file to disk and generate hmac
         openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC" 
       fi
     else
-      echo "new file, encrypt it."
+      echo "new file, encrypt it." >> /home/owen/backup.log
       openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC"
     fi
   done
@@ -170,10 +180,10 @@ do
     echo "remote directory cp --reflink=auto -rp $REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP $REMOTE_BACKUP_TARGET"
     ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" sudo cp --reflink=auto -rp "$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP $REMOTE_BACKUP_TARGET"
     echo "remote rsync -ze ssh -i $REMOTE_SSH_ID $RSYNC_OPTIONS --inplace $LOCAL_BACKUP_TARGET $REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY"
-    rsync -ze "ssh -xi $REMOTE_SSH_ID" "$RSYNC_OPTIONS" --inplace "$LOCAL_BACKUP_TARGET" "$REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY"
+    rsync -ze "ssh -xi $REMOTE_SSH_ID" $RSYNC_OPTIONS --inplace "$LOCAL_BACKUP_TARGET" "$REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY"
   else
     echo "remote rsync -ze ssh -i $REMOTE_SSH_ID $RSYNC_OPTIONS $LOCAL_BACKUP_TARGET $REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP"
-    rsync -ze "ssh -i $REMOTE_SSH_ID" "$RSYNC_OPTIONS" "$LOCAL_BACKUP_TARGET" "$REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP"
+    rsync -ze "ssh -i $REMOTE_SSH_ID" $RSYNC_OPTIONS "$LOCAL_BACKUP_TARGET" "$REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP"
   fi
 
   # Only keep a limited number of backups 
@@ -182,7 +192,7 @@ do
   do
     REMOTE_DIRECTORY_TO_DELETE="$REMOTE_BACKUP_DIRECTORY/$(ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" ls "$REMOTE_BACKUP_DIRECTORY" | head -1)"
     echo "deleting $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIRECTORY_TO_DELETE"
-    ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" sudo rm -rf "$REMOTE_DIRECTORY_TO_DELETE"
+    ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" rm -rf "$REMOTE_DIRECTORY_TO_DELETE"
   done
 done
 echo "Backup completed"
