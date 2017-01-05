@@ -38,7 +38,7 @@ source /etc/backup/systembackup.conf
 CURRENT_TIME=$(date -Ihours)
 
 # Last backup date
-LOCAL_LAST_BACKUP=$(ls "$LOCAL_BACKUP_DIRECTORY" | tail -n 1)
+LOCAL_LAST_BACKUP=$(find "$LOCAL_BACKUP_DIRECTORY" -maxdepth 1 -type d | sort | tail -n 1)
 
 # Backup location
 LOCAL_BACKUP_TARGET="$LOCAL_BACKUP_DIRECTORY/$CURRENT_TIME"
@@ -65,8 +65,8 @@ do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    LAST_HMAC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO"
-    LAST_ENC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER"
+    LAST_HMAC="$LOCAL_LAST_BACKUP/$j.hmac$HMAC_ALGO"
+    LAST_ENC="$LOCAL_LAST_BACKUP/$j.enc$CIPHER"
     TARGET_HMAC="$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
     TARGET_ENC="$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
     if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
