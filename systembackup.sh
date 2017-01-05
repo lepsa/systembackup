@@ -28,7 +28,7 @@
 #  case diff => new file
 #}
 
-set -euo pipefail
+#set -euo pipefail
 setopt shwordsplit
 
 # Get config
@@ -50,12 +50,10 @@ RSYNC_OPTIONS="-ahI --checksum --delete"
 echo "Make backup directory tree"
 for i in $SOURCES
 do
-  #echo "$i"
   # This IFS split line variable is important
   IFS=$'\n'
   for j in $(find "$i" -type d)
   do
-    #echo "$j"
     mkdir -p "$LOCAL_BACKUP_TARGET$j"
   done
   unset IFS
@@ -67,63 +65,43 @@ do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    if [ -f "$i" ]
+    LAST_HMAC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO"
+    LAST_ENC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER"
+    TARGET_HMAC="$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
+    TARGET_ENC="$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
+    if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
     then
-      echo "working on file $j" >> /home/owen/backup.log
-  
-      LAST_HMAC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.hmac$HMAC_ALGO"
-      LAST_ENC="$LOCAL_BACKUP_DIRECTORY/$LOCAL_LAST_BACKUP$j.enc$CIPHER"
-      TARGET_HMAC="$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
-      TARGET_ENC="$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
-      echo "targets setup" >> /home/owen/backup.log
-      if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
+      cmp_status=1
+      #echo "decrypt backup file and compare with current file"
+      # I remembered that io redirection as a file is totally a thing.
+      # Should also be nice on memory usage too!
+ 
+      # Check that the hmac is valid, THEN check if the crypto needs to be done.
+      if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < "$LAST_ENC" | cut -f 1 -d " ")
       then
-        cmp_status=1
-        #echo "decrypt backup file and compare with current file"
-        # I remembered that io redirection as a file is totally a thing.
-        # Should also be nice on memory usage too!
-  
-        # Check that the hmac is valid, THEN check if the crypto needs to be done.
-        echo "cmp 1" >> /home/owen/backup.log
-        if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < "$LAST_ENC" | cut -f 1 -d " ")
+        # This does some decryption, because that is what it needs to get the IV.
+        SALT_IV=$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")
+        SALT=$(echo "${SALT_IV:?}" | cut -d " " -f 1 | cut -d '=' -f 2)
+        IV=$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)
+        if cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
         then
-          echo "get salt/iv" >> /home/owen/backup.log
-          # This does some decryption, because that is what it needs to get the IV.
-          SALT_IV=$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")
-          echo "aaaaaa" >> /home/owen/backup.log
-          SALT=$(echo "${SALT_IV:?}" | cut -d " " -f 1 | cut -d '=' -f 2)
-          echo "bbbbbb" >> /home/owen/backup.log
-          IV=$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)
-          echo "salt/iv = $SALT_IV" >> /home/owen/backup.log
-          echo "salt = $SALT" >> /home/owen/backup.log
-          echo "iv = $IV" >> /home/owen/backup.log
-          echo "cmp 2" >> /home/owen/backup.log
-          if cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
-          then
-            cmp_status=0
-          else
-            cmp_status=1
-          fi
-        fi
-        if [ $cmp_status -eq 0 ]
-        then
-          # Files are the same
-          #echo "cmp_status = $cmp_status"
-          echo "Files are the same" >> /home/owen/backup.log
-          ln "$LAST_ENC" "$TARGET_ENC"
-          ln "$LAST_HMAC" "$TARGET_HMAC"
+          cmp_status=0
         else
-          # Files are differnet
-          #echo "status = $status"
-          echo "Files are different" >> /home/owen/backup.log
-  
-          # Write encrypted file to disk and generate hmac
-          openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC" 
+          cmp_status=1
         fi
-      else
-        echo "new file, encrypt it." >> /home/owen/backup.log
-        openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC"
       fi
+      if [ $cmp_status -eq 0 ]
+      then
+        # Files are the same
+        ln "$LAST_ENC" "$TARGET_ENC"
+        ln "$LAST_HMAC" "$TARGET_HMAC"
+      else
+        # Files are differnet
+        # Write encrypted file to disk and generate hmac
+        openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC" 
+      fi
+    else
+      openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC"
     fi
   done
   unset IFS
@@ -165,12 +143,12 @@ done
 for REMOTE_CONFIG_LINE in "${REMOTE_CONFIG[@]}"
 do
   # Split the config line
-  IFS=' ' read -a SPLIT_REMOTE_CONFIG <<< "$REMOTE_CONFIG_LINE"
-  REMOTE_SERVER=${SPLIT_REMOTE_CONFIG[0]}
-  REMOTE_USER=${SPLIT_REMOTE_CONFIG[1]}
-  REMOTE_SSH_ID=${SPLIT_REMOTE_CONFIG[2]}
-  REMOTE_BACKUP_DIRECTORY=${SPLIT_REMOTE_CONFIG[3]}
-  REMOTE_BACKUPS_TO_KEEP=${SPLIT_REMOTE_CONFIG[4]}
+  IFS=' ' SPLIT_REMOTE_CONFIG=(${REMOTE_CONFIG_LINE})
+  REMOTE_SERVER=${SPLIT_REMOTE_CONFIG[1]}
+  REMOTE_USER=${SPLIT_REMOTE_CONFIG[2]}
+  REMOTE_SSH_ID=${SPLIT_REMOTE_CONFIG[3]}
+  REMOTE_BACKUP_DIRECTORY=${SPLIT_REMOTE_CONFIG[4]}
+  REMOTE_BACKUPS_TO_KEEP=${SPLIT_REMOTE_CONFIG[5]}
 
   # Copy the backup to the remote server.
   # This does not create a new backup, 
