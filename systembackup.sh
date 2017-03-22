@@ -59,51 +59,55 @@ do
   unset IFS
 done
 
+processFile () {
+  name=$1
+  LAST_NAME="$LOCAL_LAST_BACKUP/$name"
+  LAST_HMAC="$LAST_NAME.hmac$HMAC_ALGO"
+  LAST_ENC="$LAST_NAME.enc$CIPHER"
+  TARGET_NAME="$LOCAL_BACKUP_TARGET$name"
+  TARGET_HMAC="$TARGET_NAME.hmac$HMAC_ALGO"
+  TARGET_ENC="$TARGET_NAME.enc$CIPHER"
+  if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
+  then
+    cmp_status=1
+    #echo "decrypt backup file and compare with current file"
+    # I remembered that io redirection as a file is totally a thing.
+    # Should also be nice on memory usage too!
+ 
+    # Check that the hmac is valid, THEN check if the crypto needs to be done.
+    if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < "$LAST_ENC" | cut -f 1 -d " ")
+    then
+      # This does some decryption, because that is what it needs to get the IV.
+      SALT_IV=$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")
+      SALT=$(echo "${SALT_IV:?}" | cut -d " " -f 1 | cut -d '=' -f 2)
+      IV=$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)
+      if cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$name")
+      then
+        cmp_status=0
+      else
+        cmp_status=1
+      fi
+    fi
+    if [ $cmp_status -eq 0 ]
+    then
+      # Files are the same
+      ln "$LAST_ENC" "$TARGET_ENC"
+      ln "$LAST_HMAC" "$TARGET_HMAC"
+    else
+      # Files are differnet
+      # Write encrypted file to disk and generate hmac
+      openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC" 
+    fi
+  else
+    openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC"
+  fi
+}
+
 echo "Start local backup"
 for i in $SOURCES
 do
   IFS=$'\n'
-  for j in $(find "$i" -type f)
-  do
-    LAST_HMAC="$LOCAL_LAST_BACKUP/$j.hmac$HMAC_ALGO"
-    LAST_ENC="$LOCAL_LAST_BACKUP/$j.enc$CIPHER"
-    TARGET_HMAC="$LOCAL_BACKUP_TARGET$j.hmac$HMAC_ALGO"
-    TARGET_ENC="$LOCAL_BACKUP_TARGET$j.enc$CIPHER"
-    if [ -f "$LAST_ENC" ] && [ -f "$LAST_HMAC" ]
-    then
-      cmp_status=1
-      #echo "decrypt backup file and compare with current file"
-      # I remembered that io redirection as a file is totally a thing.
-      # Should also be nice on memory usage too!
- 
-      # Check that the hmac is valid, THEN check if the crypto needs to be done.
-      if cmp -s "$LAST_HMAC" <(openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r < "$LAST_ENC" | cut -f 1 -d " ")
-      then
-        # This does some decryption, because that is what it needs to get the IV.
-        SALT_IV=$(openssl enc -d "$CIPHER" -pass "$PASSWORD" -P -in "$LAST_ENC" | tr "\n" " ")
-        SALT=$(echo "${SALT_IV:?}" | cut -d " " -f 1 | cut -d '=' -f 2)
-        IV=$(echo "$SALT_IV" | cut -d " " -f 4 | cut -d '=' -f 2)
-        if cmp -s "$LAST_ENC" <(openssl enc -e "$CIPHER" -pass "$PASSWORD" -S "$SALT" -iv "$IV" -in "$j")
-        then
-          cmp_status=0
-        else
-          cmp_status=1
-        fi
-      fi
-      if [ $cmp_status -eq 0 ]
-      then
-        # Files are the same
-        ln "$LAST_ENC" "$TARGET_ENC"
-        ln "$LAST_HMAC" "$TARGET_HMAC"
-      else
-        # Files are differnet
-        # Write encrypted file to disk and generate hmac
-        openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC" 
-      fi
-    else
-      openssl enc -e "$CIPHER" -pass "$PASSWORD" -in "$j" | tee "$TARGET_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$TARGET_HMAC"
-    fi
-  done
+  find "$i" -type f -exec processFile {} \;
   unset IFS
 done
 
@@ -153,27 +157,32 @@ do
   # Copy the backup to the remote server.
   # This does not create a new backup, 
   # but used the backup that was just made.
+
   REMOTE_LAST_BACKUP=$(ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" ls "$REMOTE_BACKUP_DIRECTORY" | tail -n 1)
   REMOTE_BACKUP_TARGET="$REMOTE_BACKUP_DIRECTORY/$CURRENT_TIME"
+  USER_SERVER="$REMOTE_USER@$REMOTE_SERVER"
+  USER_SERVER_DIRECTORY="$USER_SERVER:$REMOTE_BACKUP_DIRECTORY"
+  USER_SERVER_DIRECTORY_LAST="$USER_SERVER_DIRECTORY/$REMOTE_LAST_BACKUP"
+
   # Check if we need to do a full backup, or an update
   if [ "$REMOTE_LAST_BACKUP" != "$CURRENT_TIME"  ]
   then
     echo "remote directory cp --reflink=auto -rp $REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP $REMOTE_BACKUP_TARGET"
-    ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" sudo cp --reflink=auto -rp "$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP $REMOTE_BACKUP_TARGET"
-    echo "remote rsync -ze ssh -i $REMOTE_SSH_ID $RSYNC_OPTIONS --inplace $LOCAL_BACKUP_TARGET $REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY"
-    rsync -ze "ssh -xi $REMOTE_SSH_ID" $RSYNC_OPTIONS --inplace "$LOCAL_BACKUP_TARGET" "$REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY"
+    ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$USER_SERVER" sudo cp --reflink=auto -rp "$REMOTE_BACKUP_DIRECTORY_LAST $REMOTE_BACKUP_TARGET"
+    echo "remote rsync -ze ssh -i $REMOTE_SSH_ID $RSYNC_OPTIONS --inplace $LOCAL_BACKUP_TARGET $USER_SERVER_DIRECTORY"
+    rsync -ze "ssh -xi $REMOTE_SSH_ID" $RSYNC_OPTIONS --inplace "$LOCAL_BACKUP_TARGET" "$USER_SERVER_DIRECTORY"
   else
-    echo "remote rsync -ze ssh -i $REMOTE_SSH_ID $RSYNC_OPTIONS $LOCAL_BACKUP_TARGET $REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP"
-    rsync -ze "ssh -i $REMOTE_SSH_ID" $RSYNC_OPTIONS "$LOCAL_BACKUP_TARGET" "$REMOTE_USER@$REMOTE_SERVER:$REMOTE_BACKUP_DIRECTORY/$REMOTE_LAST_BACKUP"
+    echo "remote rsync -ze ssh -i $REMOTE_SSH_ID $RSYNC_OPTIONS $LOCAL_BACKUP_TARGET $USER_SERVER_DIRECTORY_LAST"
+    rsync -ze "ssh -i $REMOTE_SSH_ID" $RSYNC_OPTIONS "$LOCAL_BACKUP_TARGET" "$USER_SERVER_DIRECTORY_LAST"
   fi
 
   # Only keep a limited number of backups 
   # on the remote server
   while [ "$(ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" ls "$REMOTE_BACKUP_DIRECTORY" | wc -l)" -gt "$REMOTE_BACKUPS_TO_KEEP" ]
   do
-    REMOTE_DIRECTORY_TO_DELETE="$REMOTE_BACKUP_DIRECTORY/$(ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" ls "$REMOTE_BACKUP_DIRECTORY" | head -1)"
-    echo "deleting $REMOTE_USER@$REMOTE_SERVER:$REMOTE_DIRECTORY_TO_DELETE"
-    ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$REMOTE_USER@$REMOTE_SERVER" rm -rf "$REMOTE_DIRECTORY_TO_DELETE"
+    REMOTE_DIRECTORY_TO_DELETE="$REMOTE_BACKUP_DIRECTORY/$(ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$USER_SERVER" ls "$REMOTE_BACKUP_DIRECTORY" | head -1)"
+    echo "deleting $USER_SERVER:$REMOTE_DIRECTORY_TO_DELETE"
+    ssh -xo "BatchMode yes" -i "$REMOTE_SSH_ID" "$USER_SERVER" rm -rf "$REMOTE_DIRECTORY_TO_DELETE"
   done
 done
 echo "Backup completed"
