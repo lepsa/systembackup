@@ -123,7 +123,7 @@ fi
 PKG_HMAC="$LOCAL_BACKUP_TARGET/pkglist.txt.hmac$HMAC_ALGO"
 if [ -e "$PKG_HMAC" ]
 then
-  rm "$LOCAL_BACKUP_TARGET/pkglist.txt.hmac$HMAC_ALGO"
+  rm "$PKG_HMAC"
 fi
 pacman -Qqen | openssl enc -e "$CIPHER" -pass "$PASSWORD" | tee "$PKG_ENC" | openssl dgst "$HMAC_ALGO" -hmac "$HMAC_KEY" -r | cut -f 1 -d " " > "$PKG_HMAC"
 
