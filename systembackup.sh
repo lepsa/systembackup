@@ -101,12 +101,14 @@ processFile () {
 }
 
 echo "Start local backup"
+N=$(nproc)
 for i in $SOURCES
 do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    processFile "$j"
+    ((i=i%$iN)); ((i++==0)) && wait
+    processFile "$j" &
   done
   unset IFS
 done
