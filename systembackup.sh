@@ -101,17 +101,19 @@ processFile () {
 }
 
 echo "Start local backup"
-N=$(nproc)
+#N=$(nproc)
 for i in $SOURCES
 do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    ((i=i%$N)); ((i++==0)) && wait
-    processFile "$j" &
+    sem -j +4 processFile \""$j"\"
+   # ((i=i%$N)); ((i++==0)) && wait
+   # processFile "$j" &
   done
   unset IFS
 done
+sem --wait
 
 # Keep a list of installed packages.
 # If package list already exists, recreate it.
