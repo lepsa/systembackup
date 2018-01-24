@@ -107,7 +107,7 @@ do
   IFS=$'\n'
   for j in $(find "$i" -type f)
   do
-    ((i=i%$iN)); ((i++==0)) && wait
+    ((i=i%$N)); ((i++==0)) && wait
     processFile "$j" &
   done
   unset IFS
